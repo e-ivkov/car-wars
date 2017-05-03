@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
+using UnityEngine.UI;
 
 public class CarController : MonoBehaviour
 {
@@ -42,17 +43,9 @@ public class CarController : MonoBehaviour
 
     public void Move()
     {
-        var v = transform.forward * GridSize * MovementChart[CurrentSpeed / 5][Phase];
-        transform.Translate(v);
-        if (Phase < 4)
-            Phase++;
-        else
-        {
-            Phase = 0;
-            AccelerationPerformed = false;
-            ManeuverPerformed = false;
-            Turn++;
-        }
+        var v = transform.up * GridSize * MovementChart[CurrentSpeed / 5][Phase];
+        Debug.Log(v);
+        transform.Translate(v,Space.World);
     }
 
     public void Bend(float bendAngle)
@@ -80,12 +73,28 @@ public class CarController : MonoBehaviour
         if (acceleartionFlag)
             Accelerate(acceleration);
         Move();
+        if (Phase < 4)
+            Phase++;
+        else
+        {
+            Phase = 0;
+            AccelerationPerformed = false;
+            ManeuverPerformed = false;
+            Turn++;
+        }
+    }
+
+    public void ParsePhaseInput()
+    {
+        var values = GameObject.Find("InputField").GetComponent<InputField>().text.Split(',');
+        PhaseUpdate(bool.Parse(values[0]), float.Parse(values[1]), bool.Parse(values[2]), int.Parse(values[3]));
     }
 
     // Use this for initialization
     void Start()
     {
         CurrentHandlingClass = HandlingClass;
+        LoadMoavementChart("MovementChart.csv", ',');
     }
 
     // Update is called once per frame
