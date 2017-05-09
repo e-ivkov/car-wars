@@ -18,6 +18,7 @@ namespace CarWars
         public float GridSize;
 
         private int CurrentSpeed = 0;
+        private float CurrentDirection = 1;
         private int CurrentHandlingClass;
         private int Phase = 0;
         private int Turn = 0;
@@ -28,6 +29,7 @@ namespace CarWars
         private Vector3 SkidVector;                 //used only for skid maneuver
 
         private float[][] MovementChart = new float[60][];
+        private int[][] ControlTable = new int[30][];
 
         private Vector3[] GetCorners()
         {
@@ -46,46 +48,40 @@ namespace CarWars
             return new Vector3[4] { topLeft, topRight, btmLeft, btmRight };
         }
 
-        private void LoadMoavementChart(string filename, char separator)
+        private void LoadTable<T>(string filename, char separator, T[][] table, int n, int m)
         {
             using (var fs = File.OpenRead(filename))
             using (var reader = new StreamReader(fs))
             {
-                for (int i = 0; i < 60; i++)
+                for (int i = 0; i < n; i++)
                 {
                     var line = reader.ReadLine();
                     var values = line.Split(separator);
-                    MovementChart[i] = new float[5];
-                    for (int j = 0; j < 5; j++)
+                    table[i] = new T[m];
+                    for (int j = 0; j < m; j++)
                     {
-                        MovementChart[i][j] = float.Parse(values[j]);
+                        table[i][j] = (T)System.Convert.ChangeType(values[j], typeof(T)); ;
                     }
                 }
             }
         }
 
-        public void Move()
+        private void Move(float dist)
         {
-            var v = transform.up * GridSize * MovementChart[CurrentSpeed / 5][Phase];
+            var v = transform.up * GridSize * dist * CurrentDirection;
             //Debug.Log(v);
             transform.Translate(v, Space.World);
         }
 
-        public void OneMove()
+        private void Drift(float driftOffset)
         {
-            var v = transform.up * GridSize;
-            transform.Translate(v, Space.World);
-        }
-
-        public void Drift(float driftOffset)
-        {
-            OneMove();
+            Move(1);
             transform.Translate(driftOffset, 0, 0);
             CurrentManeuver = (int)Maneuvers.Drift;
             ManeuverState = 2;
         }
 
-        public void Swerve(float bendAngle)
+        private void Swerve(float bendAngle)
         {
             transform.Translate(Mathf.Sign(bendAngle) * 0.25f * GridSize, 0, 0);
             Bend(bendAngle);
@@ -93,9 +89,9 @@ namespace CarWars
             ManeuverState = 2;
         }
 
-        public void Bend(float bendAngle)
+        private void Bend(float bendAngle)
         {
-            OneMove();
+            Move(1);
             Vector3[] cornerPoints = GetCorners();
             Vector3 rotationPoint;
             if (bendAngle > 0)
@@ -107,7 +103,7 @@ namespace CarWars
             ManeuverState = 2;
         }
 
-        public void ControlledSkid(float skidParam, bool bend)
+        private void ControlledSkid(float skidParam, bool bend)
         {
             if (ManeuverState == 0)
             {
@@ -130,11 +126,11 @@ namespace CarWars
             ManeuverState++;
         }
 
-        public void JTurn(float jTurnParam) //jTurnParam = +-1 indicates the direction of rotation
+        private void JTurn(float jTurnParam) //jTurnParam = +-1 indicates the direction of rotation
         {
             if (ManeuverState == 0)
             {
-                OneMove();
+                Move(1);
                 SkidVector = transform.up;
                 JTurnBend(jTurnParam);
                 CurrentManeuver = (int)Maneuvers.JTurn;
@@ -147,16 +143,16 @@ namespace CarWars
             ManeuverState++;
         }
 
-        public void JTurnBend(float jTurnParam)
+        private void JTurnBend(float jTurnParam)
         {
             Fishtail(jTurnParam * 90f);
         }
 
-        public void TStop(float tStopParam) //tStopParam = +-1 indicates the direction of rotation
+        private void TStop(float tStopParam) //tStopParam = +-1 indicates the direction of rotation
         {
             if (ManeuverState == 0)
             {
-                OneMove();
+                Move(1);
                 SkidVector = transform.up;
                 transform.Rotate(0, 0, tStopParam * 90f);
                 CurrentManeuver = (int)Maneuvers.TStop;
@@ -169,7 +165,7 @@ namespace CarWars
             TStopDeccelerate();
         }
 
-        public void TStopDeccelerate()
+        private void TStopDeccelerate()
         {
             if (CurrentSpeed < 20)
                 CurrentSpeed = 0;
@@ -177,7 +173,7 @@ namespace CarWars
                 CurrentSpeed -= 20;
         }
 
-        public void Pivot(float bendAngle)
+        private void Pivot(float bendAngle)
         {
             transform.Translate(transform.up * GridSize * 0.25f, Space.World);
             Vector3[] cornerPoints = GetCorners();
@@ -191,7 +187,7 @@ namespace CarWars
             ManeuverState = 2;
         }
 
-        public void Fishtail(float bendAngle)
+        private void Fishtail(float bendAngle)
         {
             Vector3[] cornerPoints = GetCorners();
             Vector3 rotationPoint;
@@ -202,50 +198,57 @@ namespace CarWars
             transform.RotateAround(rotationPoint, transform.forward, bendAngle);
         }
 
-        public void Accelerate(int acceleration)
+        private void Accelerate(int acceleration)
         {
             CurrentSpeed += acceleration;
             AccelerationPerformed = true;
         }
 
-        //TODO: implement difficulty levels and boundaries for maneuvers
-        public void PhaseUpdate(int maneuver, float maneuverParam, bool acceleartionFlag, int acceleration)
+        private void ExecuteManeuver(int maneuver, float maneuverParam)
         {
+            switch (maneuver)
+            {
+                case (int)Maneuvers.Bend:
+                    Bend(maneuverParam);
+                    break;
+                case (int)Maneuvers.Drift:
+                    Drift(maneuverParam);
+                    break;
+                case (int)Maneuvers.Swerve:
+                    Swerve(maneuverParam);
+                    break;
+                case (int)Maneuvers.BendControlledSkid:
+                    ControlledSkid(maneuverParam, true);
+                    break;
+                case (int)Maneuvers.SwerveControlledSkid:
+                    ControlledSkid(maneuverParam, false);
+                    break;
+                case (int)Maneuvers.JTurn:
+                    JTurn(maneuverParam);
+                    break;
+                case (int)Maneuvers.TStop:
+                    TStop(maneuverParam);
+                    break;
+                case (int)Maneuvers.Pivot:
+                    Pivot(maneuverParam);
+                    break;
+            }
+        }
+
+        //TODO: implement difficulty levels and boundaries for maneuvers
+        private void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration)
+        {
+            CurrentDirection = System.Math.Sign(CurrentSpeed);
+            float dist = MovementChart[System.Math.Abs(CurrentSpeed) / 5][Phase];
             if (acceleartionFlag && !AccelerationPerformed)
                 Accelerate(acceleration);
-            if (MovementChart[CurrentSpeed / 5][Phase] >= 1 && ManeuverState < 2)
-                switch (maneuver)
-                {
-                    case (int)Maneuvers.Bend:
-                        Bend(maneuverParam);
-                        break;
-                    case (int)Maneuvers.Drift:
-                        Drift(maneuverParam);
-                        break;
-                    case (int)Maneuvers.Swerve:
-                        Swerve(maneuverParam);
-                        break;
-                    case (int)Maneuvers.BendControlledSkid:
-                        ControlledSkid(maneuverParam, true);
-                        break;
-                    case (int)Maneuvers.SwerveControlledSkid:
-                        ControlledSkid(maneuverParam, false);
-                        break;
-                    case (int)Maneuvers.JTurn:
-                        JTurn(maneuverParam);
-                        break;
-                    case (int)Maneuvers.TStop:
-                        TStop(maneuverParam);
-                        break;
-                    case (int)Maneuvers.Pivot:
-                        Pivot(maneuverParam);
-                        break;
-                    default:
-                        Move();
-                        break;
-                }
-            else
-                Move();
+            if (maneuverDist > dist)
+                maneuverDist = dist;
+            Move(maneuverDist);
+            dist -= maneuverDist;
+            if (dist >= 1 && ManeuverState < 2 && maneuver > -1)
+                ExecuteManeuver(maneuver, maneuverParam);
+            Move(dist);
             if (Phase < 4)
                 Phase++;
             else
@@ -258,17 +261,20 @@ namespace CarWars
             }
         }
 
+        
+
         public void ParsePhaseInput()
         {
             var values = GameObject.Find("InputField").GetComponent<InputField>().text.Split(',');
-            PhaseUpdate(int.Parse(values[0]), float.Parse(values[1]), bool.Parse(values[2]), int.Parse(values[3]));
+            PhaseUpdate(int.Parse(values[0]), float.Parse(values[1]), float.Parse(values[2]), bool.Parse(values[3]), int.Parse(values[4]));
         }
 
         // Use this for initialization
         void Start()
         {
             CurrentHandlingClass = HandlingClass;
-            LoadMoavementChart("MovementChart.csv", ',');
+            LoadTable<float>("MovementChart.csv", ',', MovementChart, 60, 5);
+            //LoadTable<int>("ControlTable.csv", ',', ControlTable, 30, 15);
         }
 
         // Update is called once per frame
