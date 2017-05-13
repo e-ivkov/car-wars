@@ -13,20 +13,53 @@ namespace CarWars
         public int Weight;
         public int Cost;
         public int HandlingClass;
-        public int Acceleration;
+        public int MaxAcceleration;
         public int TopSpeed;
         public float GridSize;
+        public int[] Tires = new int[4];
+        public int[] Sides = new int[6];            //F, T, L, R, U, B
+        public bool Drivable
+        {
+            get
+            {
+                return drivable;
+            }
+        }
 
-        private int CurrentSpeed = 0;
+        private bool drivable = true;
+        private int CurrentSpeed = 200;
         private float CurrentDirection = 1;
-        private int CurrentHandlingClass;
+        private int currentHandlingClass;
+        private int CurrentHandlingClass
+        {
+            get
+            {
+                return currentHandlingClass;
+            }
+            set
+            {
+                if (value > HandlingClass)
+                    currentHandlingClass = HandlingClass;
+                else if (value < -6)
+                    currentHandlingClass = -6;
+                else
+                    currentHandlingClass = value;
+            }
+        }
         private int Phase = 0;
         private int Turn = 0;
         private bool AccelerationPerformed = false;
         private int ManeuverState = 0;              //0 - not performed, 1 - middle phase, 2 - final phase
                                                     //not all maneuvers have the middle phase
         private int CurrentManeuver = -1;
-        private Vector3 SkidVector;                 //used only for skid maneuver
+
+        private Vector3 BeforeManeuverVector;       //used for crash table results
+        private bool InCrash = false;
+        delegate void Del();
+        private int CrashResultIndex = -1;
+        private Del[] CrashResults;
+        private int RollParam = 0;
+        private int[] RollSideIndexes = new int[4] { 2, 1, 3, 4 };
 
         private float[][] MovementChart = new float[60][];
         private int[][] ControlTable = new int[30][];
@@ -66,6 +99,15 @@ namespace CarWars
             }
         }
 
+        /// <param name="n"> number of dice </param>
+        private int RollADice(int n)
+        {
+            int r = 0;
+            for (int i = 0; i < n; i++)
+                r += Random.Range(1, 7);
+            return r;
+        }
+
         private void Move(float dist)
         {
             var v = transform.up * GridSize * dist * CurrentDirection;
@@ -75,6 +117,8 @@ namespace CarWars
 
         private void Drift(float driftOffset)
         {
+            if (System.Math.Abs(driftOffset) > 0.5f || System.Math.Abs(driftOffset) < 0.25f)
+                throw new System.ArgumentException("Absolute value of driftOffset should be in range from 0.25 to 0.5", "driftOffset");
             Move(1);
             transform.Translate(driftOffset, 0, 0);
             CurrentManeuver = (int)Maneuvers.Drift;
@@ -91,6 +135,8 @@ namespace CarWars
 
         private void Bend(float bendAngle)
         {
+            if (System.Math.Abs(bendAngle) > 90)
+                throw new System.ArgumentException("Bend angle can not be more then 90", "bendAngle");
             Move(1);
             Vector3[] cornerPoints = GetCorners();
             Vector3 rotationPoint;
@@ -107,7 +153,6 @@ namespace CarWars
         {
             if (ManeuverState == 0)
             {
-                SkidVector = transform.up;
                 if (bend)
                 {
                     Bend(skidParam);
@@ -121,26 +166,35 @@ namespace CarWars
             }
             else if (CurrentManeuver == (int)Maneuvers.BendControlledSkid || CurrentManeuver == (int)Maneuvers.SwerveControlledSkid)
             {
-                transform.Translate(SkidVector * skidParam, Space.World);
+                if (skidParam > 1 || skidParam < 0.25f)
+                    throw new System.ArgumentException("SkidParam on the second state should be in range from 0 to 1", "skidParam");
+                transform.Translate(BeforeManeuverVector * skidParam, Space.World);
             }
             ManeuverState++;
         }
 
         private void JTurn(float jTurnParam) //jTurnParam = +-1 indicates the direction of rotation
         {
+            if (System.Math.Abs(jTurnParam) != 1)
+                throw new System.ArgumentException("JTurnParam can be only 1 or -1", "jTurnParam");
+            if (System.Math.Abs(CurrentSpeed) < 20 || System.Math.Abs(CurrentSpeed) > 35)
+                throw new System.InvalidOperationException("J-Turn can only be performed if speed is between 20 and 35 mph");
             if (ManeuverState == 0)
             {
                 Move(1);
-                SkidVector = transform.up;
                 JTurnBend(jTurnParam);
                 CurrentManeuver = (int)Maneuvers.JTurn;
+                for (int i = 0; i < 4; i++)
+                    if (Tires[i] > 0)
+                        Tires[i]--;             //TODO: check damage
             }
             else if (CurrentManeuver == (int)Maneuvers.JTurn)
             {
-                transform.Translate(SkidVector * GridSize, Space.World);
+                transform.Translate(BeforeManeuverVector * GridSize, Space.World);
                 JTurnBend(-jTurnParam);
             }
             ManeuverState++;
+            DeccelerateUncontrolled(20);
         }
 
         private void JTurnBend(float jTurnParam)
@@ -150,31 +204,80 @@ namespace CarWars
 
         private void TStop(float tStopParam) //tStopParam = +-1 indicates the direction of rotation
         {
+            if (System.Math.Abs(tStopParam) != 1)
+                throw new System.ArgumentException("TStopParam can be only 1 or -1", "tStopParam");
+            if (CurrentSpeed < 20 || CurrentSpeed > 35)
+                throw new System.InvalidOperationException("T-Stop can only be performed if speed is between 20 and 35 mph");
             if (ManeuverState == 0)
             {
                 Move(1);
-                SkidVector = transform.up;
                 transform.Rotate(0, 0, tStopParam * 90f);
                 CurrentManeuver = (int)Maneuvers.TStop;
             }
             else if (CurrentManeuver == (int)Maneuvers.TStop)
             {
-                transform.Translate(SkidVector * GridSize, Space.World);
+                transform.Translate(BeforeManeuverVector * GridSize, Space.World);
             }
             ManeuverState++;
-            TStopDeccelerate();
+            DeccelerateUncontrolled(20);
+            for (int i = 0; i < 4; i++)
+                if (Tires[i] > 0)
+                    Tires[i]--;             //TODO: check damage
         }
 
-        private void TStopDeccelerate()
+        private void Deccelerate(int a)
         {
-            if (CurrentSpeed < 20)
+            int tireDamage = 0;
+            int d = 0;
+            switch (a)
+            {
+                case 15:
+                    d = 1;
+                    break;
+                case 20:
+                    d = 2;
+                    break;
+                case 25:
+                    d = 3;
+                    break;
+                case 30:
+                    d = 5;
+                    break;
+                case 35:
+                    d = 7;
+                    tireDamage = 2;
+                    break;
+            }
+            if (a >= 40)
+            {
+                d = a / 5 + 2;
+                tireDamage = RollADice(1) + 3 * (a / 5 - 8);
+            }
+            for (int i = 0; i < 4; i++)
+                if (Tires[i] > 0)
+                    Tires[i] -= tireDamage;
+            CurrentHandlingClass -= d;
+            DeccelerateUncontrolled(a);
+            if (d > 0)
+            {
+                ControllRoll(d);
+            }
+        }
+
+        private void DeccelerateUncontrolled(int a)
+        {
+            if (System.Math.Abs(CurrentSpeed) < a)
                 CurrentSpeed = 0;
             else
-                CurrentSpeed -= 20;
+                CurrentSpeed -= a * (int)CurrentDirection;
         }
 
         private void Pivot(float bendAngle)
         {
+            if (System.Math.Abs(bendAngle) > 90)
+                throw new System.ArgumentException("Bend angle can not be more then 90", "bendAngle");
+            if (System.Math.Abs(CurrentSpeed) > 5)
+                throw new System.InvalidOperationException("Speed should be no more than 5 mph to perform pivot");
             transform.Translate(transform.up * GridSize * 0.25f, Space.World);
             Vector3[] cornerPoints = GetCorners();
             Vector3 rotationPoint;
@@ -200,68 +303,262 @@ namespace CarWars
 
         private void Accelerate(int acceleration)
         {
-            CurrentSpeed += acceleration;
-            AccelerationPerformed = true;
+            if (acceleration % 5 != 0)
+                throw new System.ArgumentException("Acceleration should be divisible by 5", "acceleration");
+            if (System.Math.Abs(acceleration) > MaxAcceleration)
+                throw new System.ArgumentException("Can not accelerate higher than MaxAcceleration", "acceleration");
+            if (CurrentSpeed == 0 || System.Math.Sign(acceleration) == System.Math.Sign(CurrentSpeed))
+            {
+                CurrentSpeed += acceleration;
+                AccelerationPerformed = true;
+            }
+            else
+                Deccelerate(System.Math.Abs(acceleration));
         }
+
 
         private void ExecuteManeuver(int maneuver, float maneuverParam)
         {
+            BeforeManeuverVector = transform.up * CurrentDirection;
+            int d = 0;
             switch (maneuver)
             {
                 case (int)Maneuvers.Bend:
+                    d = (int)System.Math.Ceiling(maneuverParam / 15);
                     Bend(maneuverParam);
                     break;
                 case (int)Maneuvers.Drift:
+                    if (System.Math.Abs(maneuverParam) <= 0.25)
+                        d = 1;
+                    else
+                        d = 3;
                     Drift(maneuverParam);
                     break;
                 case (int)Maneuvers.Swerve:
+                    d = (int)System.Math.Ceiling(maneuverParam / 15);
                     Swerve(maneuverParam);
                     break;
                 case (int)Maneuvers.BendControlledSkid:
+                    d = (int)System.Math.Ceiling(maneuverParam / 15) + 2;
                     ControlledSkid(maneuverParam, true);
                     break;
                 case (int)Maneuvers.SwerveControlledSkid:
+                    d = (int)System.Math.Ceiling(maneuverParam / 15) + 2;
                     ControlledSkid(maneuverParam, false);
                     break;
                 case (int)Maneuvers.JTurn:
+                    d = 7;
+                    for (int i = 0; i < 4; i++)     //TODO: check damage
+                        Tires[i]--;
                     JTurn(maneuverParam);
                     break;
                 case (int)Maneuvers.TStop:
+                    d = System.Math.Abs(CurrentSpeed) / 10;
                     TStop(maneuverParam);
                     break;
                 case (int)Maneuvers.Pivot:
                     Pivot(maneuverParam);
                     break;
             }
+            CurrentHandlingClass -= d;
+            if (d > 0)
+            {
+                ControllRoll(d);
+            }
         }
 
-        //TODO: implement difficulty levels and boundaries for maneuvers
+        private void ControllRoll(int d)
+        {
+            int c = ControlTable[(int)System.Math.Ceiling(System.Math.Abs(CurrentSpeed) / 10f)][7 - CurrentHandlingClass];
+            if (RollADice(1) < c)
+                StartCrash(ControlTable[(int)System.Math.Ceiling(System.Math.Abs(CurrentSpeed) / 10f)][14], d);
+        }
+
+        private void StartCrash(int crashModifier, int d)
+        {
+            int roll = RollADice(2) + crashModifier + d - 3;
+            if (roll <= 16)
+            {
+                CrashResultIndex = (int)System.Math.Floor((roll - 1) / 2f);
+            }
+            else
+            {
+                CrashResultIndex = 7;
+            }
+            InCrash = true;
+            ManeuverState = 0;
+            Debug.Log("here!");
+        }
+
+        private void Vault()
+        {
+            Skid(RollADice(1));
+            int tireDamage = RollADice(3);
+            for (int i = 0; i < 4; i++)
+                if (Tires[i] > 0)
+                    Tires[i] -= tireDamage;
+            //TODO: Add collision damage upon landing
+            CrashResultIndex = 5;
+            Debug.Log("Vault");
+        }
+
+        private void BurningRoll()
+        {
+            //TODO: Add burning effect
+            Roll();
+            Debug.Log("BurningRoll");
+        }
+
+        private void Roll()
+        {
+            Skid(1);
+            DeccelerateUncontrolled(20);
+            transform.rotation = Quaternion.LookRotation(new Vector3(0, 0, 1), BeforeManeuverVector);
+            transform.Rotate(0, 0, 90);
+            int existingTires = 0;
+            for (int i = 0; i < 4; i++)
+                if (Tires[i] > 0)
+                    existingTires++;
+            if (RollParam % 4 == 3 && existingTires > 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    if (Tires[i] > 0)
+                        Tires[i]--;
+            }
+            else
+            {
+                Sides[RollSideIndexes[RollParam % 4]]--;
+            }
+            RollParam++;
+            if (CurrentSpeed == 0)
+            {
+                InCrash = false;
+                drivable = false;
+                if (RollParam % 4 == 3 && existingTires >= 3)
+                    drivable = true;
+                RollParam = 0;
+            }
+            Debug.Log("Roll");
+        }
+
+        private void Spinout()
+        {
+            Skid(1);
+            DeccelerateUncontrolled(20);
+            for (int i = 0; i < 4; i++) //TODO: check damage
+                Tires[i]--;
+            transform.Rotate(0, 0, 90);
+            int c = ControlTable[(int)System.Math.Ceiling(System.Math.Abs(CurrentSpeed) / 10f)][13];
+            if (RollADice(1) >= c || CurrentSpeed == 0)
+                InCrash = false;
+            Debug.Log("Spinout");
+        }
+
+        private void SevereSkid()
+        {
+            Skid(1);
+            DeccelerateUncontrolled(20);
+            for (int i = 0; i < 4; i++) //TODO: check damage
+                Tires[i] -= 2;
+            CrashResultIndex = 1;
+            Debug.Log("SevereSkid");
+        }
+
+        private void ModerateSkid()
+        {
+            Skid(0.75f);
+            DeccelerateUncontrolled(10);
+            for (int i = 0; i < 4; i++) //TODO: check damage
+                Tires[i]--;
+            CrashResultIndex = 0;
+            Debug.Log("ModerateSkid");
+        }
+
+        private void MinorSkid()
+        {
+            Skid(0.2f);
+            DeccelerateUncontrolled(5);
+            InCrash = false;
+            Debug.Log("MinorSkid");
+        }
+
+        private void TrivialSkid()
+        {
+            Skid(0.25f);
+            InCrash = false;
+            Debug.Log("TrivialSkid");
+        }
+
+        private void Skid(float dist)
+        {
+            transform.Translate(BeforeManeuverVector * GridSize * dist, Space.World);
+        }
+
+        private void CheckDrivable()
+        {
+            int existingTires = 0;
+            for (int i = 0; i < 4; i++)
+                if (Tires[i] > 0)
+                    existingTires++;
+            if (existingTires > 3)
+                drivable = true;
+            else
+                drivable = false;
+        }
+
+        /// <summary>
+        /// Method which is called each phase for each car
+        /// </summary>
+        /// <param name="maneuver"> -1 or Maneuver; If maneuver is 2 state, then it should be called twice </param>
+        /// <param name="maneuverParam"></param>
+        /// <param name="maneuverDist">should be 0 on the second state of maneuver if it's 2 state</param>
+        /// <param name="acceleartionFlag"></param>
+        /// <param name="acceleration"> acceleration % 5 = 0 </param>
         private void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration)
         {
-            CurrentDirection = System.Math.Sign(CurrentSpeed);
-            float dist = MovementChart[System.Math.Abs(CurrentSpeed) / 5][Phase];
-            if (acceleartionFlag && !AccelerationPerformed)
-                Accelerate(acceleration);
-            if (maneuverDist > dist)
-                maneuverDist = dist;
-            Move(maneuverDist);
-            dist -= maneuverDist;
-            if (dist >= 1 && ManeuverState < 2 && maneuver > -1)
-                ExecuteManeuver(maneuver, maneuverParam);
-            Move(dist);
+            CheckDrivable();
+            if (InCrash)
+            {
+                Debug.Log(CrashResultIndex);
+                CrashResults[CrashResultIndex]();
+                Debug.Log(InCrash);
+                Debug.Log(CurrentSpeed);
+            }
+            else if (drivable)
+            {
+                CurrentDirection = System.Math.Sign(CurrentSpeed);
+                float dist = MovementChart[System.Math.Abs(CurrentSpeed) / 5][Phase];
+                if (acceleartionFlag && !AccelerationPerformed)
+                    Accelerate(acceleration);
+                if (maneuverDist > dist)
+                    maneuverDist = dist;
+                Move(maneuverDist);
+                dist -= maneuverDist;
+                if (dist >= 1 && ManeuverState == 0 && maneuver > -1)
+                    ExecuteManeuver(maneuver, maneuverParam);
+                if (ManeuverState == 1 && maneuver > -1)
+                    ExecuteManeuver(maneuver, maneuverParam);
+                else
+                    Move(dist);
+            }
             if (Phase < 4)
                 Phase++;
             else
             {
                 Phase = 0;
                 AccelerationPerformed = false;
-                ManeuverState = 0;
-                CurrentManeuver = -1;
+                CurrentHandlingClass++;
+                if (ManeuverState == 2)
+                {
+                    ManeuverState = 0;
+                    CurrentManeuver = -1;
+                }
                 Turn++;
             }
+
         }
 
-        
+
 
         public void ParsePhaseInput()
         {
@@ -273,8 +570,9 @@ namespace CarWars
         void Start()
         {
             CurrentHandlingClass = HandlingClass;
-            LoadTable<float>("MovementChart.csv", ',', MovementChart, 60, 5);
-            //LoadTable<int>("ControlTable.csv", ',', ControlTable, 30, 15);
+            LoadTable("MovementChart.csv", ',', MovementChart, 60, 5);
+            LoadTable("ControlTable.csv", ',', ControlTable, 30, 15);
+            CrashResults = new Del[8] { TrivialSkid, MinorSkid, ModerateSkid, SevereSkid, Spinout, Roll, BurningRoll, Vault };
         }
 
         // Update is called once per frame
