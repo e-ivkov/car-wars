@@ -6,6 +6,8 @@ using UnityEngine.UI;
 namespace CarWars
 {
     enum Maneuvers { Bend, Drift, Swerve, BendControlledSkid, SwerveControlledSkid, JTurn, TStop, Fishtail, Pivot, }
+    enum SideNames { Front, Top, Left, Right, Underbody, Back }
+    enum Corners { TopLeft, TopRight, BtmLeft, BtmRight }
 
     public class CarController : MonoBehaviour
     {
@@ -25,12 +27,41 @@ namespace CarWars
                 return drivable;
             }
         }
+        public float DamageModifier
+        {
+            get
+            {
+                if (Weight <= 2000)
+                    return 1 / 3;
+                if (Weight <= 4000)
+                    return 2 / 3;
+                return (float)System.Math.Ceiling(Weight / 4000f) - 1;
+            }
+        }
 
         private bool drivable = true;
-        private int CurrentSpeed = 200;
-        private float CurrentDirection = 1;
+        private int currentSpeed = 200;
+        public int CurrentSpeed
+        {
+            get
+            {
+                return currentSpeed;
+            }
+            set
+            {
+                currentSpeed = value;
+            }
+        }
+        private float currentDirection = 1;
+        public float CurrentDirection
+        {
+            get
+            {
+                return currentDirection;
+            }
+        }
         private int currentHandlingClass;
-        private int CurrentHandlingClass
+        public int CurrentHandlingClass
         {
             get
             {
@@ -63,6 +94,7 @@ namespace CarWars
 
         private float[][] MovementChart = new float[60][];
         private int[][] ControlTable = new int[30][];
+        private float[][] TemporarySpeedTable = new float[21][];
 
         private Vector3[] GetCorners()
         {
@@ -99,6 +131,14 @@ namespace CarWars
             }
         }
 
+        public void DamageSide(int i, int damage)
+        {
+            if (Sides[i] > damage)
+                Sides[i] -= damage;
+            else
+                Sides[i] = 0;
+        }
+
         /// <param name="n"> number of dice </param>
         private int RollADice(int n)
         {
@@ -108,11 +148,187 @@ namespace CarWars
             return r;
         }
 
+        private int ComputeRamDamage(int speed)
+        {
+            if (speed > 25)
+                return RollADice(speed / 5 - 5);
+            else
+                return RollADice(1);
+        }
+
         private void Move(float dist)
         {
             var v = transform.up * GridSize * dist * CurrentDirection;
             //Debug.Log(v);
-            transform.Translate(v, Space.World);
+            SetCollidersEnabled(false);
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit, v.magnitude)) //collision detected
+            {
+                var v1 = transform.up * CurrentDirection * hit.distance;
+                transform.Translate(transform.up * CurrentDirection * hit.distance);
+                bool canMove = HandleCollision(hit.collider);
+                if (canMove)
+                    transform.Translate(v - v1);
+            }
+            else
+            {
+                transform.Translate(v, Space.World);
+            }
+            SetCollidersEnabled(true);
+        }
+
+        private bool HandleCollision(Collider collision) //returns true if vehicle can continue its movement
+        {
+            CarController opponent = collision.GetComponentInParent<CarController>();
+            int oldSpeed = CurrentSpeed;
+            int opponentOldSpeed = opponent.CurrentSpeed;
+            bool flag = false;
+            switch (collision.gameObject.name)
+            {
+                case "RightSide":
+                    HandleTBone(opponent, false);
+                    if (System.Math.Abs(CurrentSpeed) > 0)
+                    {
+                        PushConformingOpponent((int)Corners.TopRight, 1, collision, opponent.transform);
+                        flag = true;
+                    }
+                    break;
+                case "LeftSide":
+                    HandleTBone(opponent, true);
+                    if (System.Math.Abs(CurrentSpeed) > 0)
+                    {
+                        PushConformingOpponent((int)Corners.TopLeft, -1, collision, opponent.transform);
+                        flag = true;
+                    }
+                    break;
+                case "FrontSide":
+                    if (opponent.CurrentDirection > 0)
+                    {
+                        HandleHeadOn(opponent);
+                        if (System.Math.Abs(CurrentSpeed) > 0)
+                        {
+                            PushConformingOpponent((int)Corners.TopLeft, 1, collision, opponent.transform);
+                            flag = true;
+                        }
+                    }
+                    else
+                    {
+                        HandleRearEnd(opponent);
+                        if (DamageModifier > opponent.DamageModifier)
+                        {
+                            PushConformingOpponent((int)Corners.TopLeft, -1, collision, opponent.transform);
+                            flag = true;
+                        }
+                    }
+                    break;
+                case "RearSide":
+                    if (opponent.CurrentDirection > 0)
+                    {
+                        HandleRearEnd(opponent);
+                        if(DamageModifier > opponent.DamageModifier)
+                        {
+                            PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
+                            flag = true;
+                        }
+                    }
+                    else
+                    {
+                        HandleHeadOn(opponent);
+                        if (System.Math.Abs(CurrentSpeed) > 0)
+                        {
+                            PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
+                            flag = true;
+                        }
+                    }
+                    break;
+            }
+            CurrentHandlingClass -= (int)System.Math.Ceiling((oldSpeed - CurrentSpeed) / 10f);
+            ControllRoll(1);
+            opponent.CurrentHandlingClass -= (int)System.Math.Ceiling((opponentOldSpeed - opponent.CurrentSpeed) / 10f);
+            opponent.ControllRoll(1);
+            return flag;
+        }
+
+        private void HandleTBone(CarController opponent, bool left)
+        {
+            int collisionSpeed = CurrentSpeed;
+            int ram = ComputeRamDamage(collisionSpeed);
+            if (CurrentDirection > 0)
+                DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * opponent.DamageModifier));
+            else
+                DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * opponent.DamageModifier));
+            if(left)
+                opponent.DamageSide((int)SideNames.Left, (int)System.Math.Round(ram * DamageModifier));
+            else
+                opponent.DamageSide((int)SideNames.Right, (int)System.Math.Round(ram * DamageModifier));
+            CurrentSpeed = (int)System.Math.Round(CurrentSpeed * TemporarySpeedTable[(int)DamageModifier][(int)opponent.DamageModifier] / 5) * 5;
+
+        }
+
+        private void HandleHeadOn(CarController opponent)
+        {
+            int collisionSpeed = CurrentSpeed + opponent.CurrentSpeed;
+            int ram = ComputeRamDamage(collisionSpeed);
+            if (CurrentDirection > 0)
+                DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * opponent.DamageModifier));
+            else
+                DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * opponent.DamageModifier));
+            if (opponent.CurrentDirection < 0)
+                opponent.DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * DamageModifier));
+            else
+                opponent.DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * DamageModifier));
+            int tempSpeed1 = (int)System.Math.Round(CurrentSpeed * TemporarySpeedTable[(int)DamageModifier][(int)opponent.DamageModifier] / 5) * 5;
+            int tempSpeed2 = (int)System.Math.Round(opponent.CurrentSpeed * TemporarySpeedTable[(int)opponent.DamageModifier][(int)DamageModifier] / 5) * 5;
+            if (tempSpeed1 > tempSpeed2)
+            {
+                CurrentSpeed = tempSpeed1 - tempSpeed2;
+                opponent.CurrentSpeed = 0;
+            }
+            else
+            {
+                opponent.CurrentSpeed = tempSpeed2 - tempSpeed1;
+                CurrentSpeed = 0;
+            }
+        }
+
+        private void HandleRearEnd(CarController opponent)
+        {
+            int collisionSpeed = System.Math.Abs(CurrentSpeed - opponent.CurrentSpeed);
+            int ram = ComputeRamDamage(collisionSpeed);
+            if(CurrentDirection > 0)
+                DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * opponent.DamageModifier));
+            else
+                DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * opponent.DamageModifier));
+            if (opponent.CurrentDirection > 0)
+                opponent.DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * DamageModifier));
+            else
+                opponent.DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * DamageModifier));
+            int tempSpeed1 = (int)System.Math.Round(CurrentSpeed * TemporarySpeedTable[(int)DamageModifier][(int)opponent.DamageModifier] / 5) * 5;
+            int tempSpeed2 = (int)System.Math.Round(opponent.CurrentSpeed * TemporarySpeedTable[(int)opponent.DamageModifier][(int)DamageModifier] / 5) * 5;
+            CurrentSpeed = tempSpeed1 + tempSpeed2;
+            opponent.CurrentSpeed = CurrentSpeed;
+        }
+
+        private void PushConformingOpponent(int corner, float angle, Collider collision, Transform opponent)
+        {
+            var v = transform.up * CurrentDirection;
+            RaycastHit hit;
+            bool hitFlag = Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit);
+            Vector3[] corners = GetCorners();
+            while(hitFlag && hit.collider == collision)
+            {
+                opponent.Rotate(corners[corner], angle);
+                hitFlag = Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit);
+            }
+        }
+
+        private void SetCollidersEnabled(bool enabled)
+        {
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                transform.GetChild(i).GetComponent<Collider2D>().enabled = enabled;
+            }
+            transform.GetComponent<Collider2D>().enabled = enabled;
         }
 
         private void Drift(float driftOffset)
@@ -258,6 +474,7 @@ namespace CarWars
                     Tires[i] -= tireDamage;
             CurrentHandlingClass -= d;
             DeccelerateUncontrolled(a);
+            ManeuverState = 2;
             if (d > 0)
             {
                 ControllRoll(d);
@@ -267,9 +484,9 @@ namespace CarWars
         private void DeccelerateUncontrolled(int a)
         {
             if (System.Math.Abs(CurrentSpeed) < a)
-                CurrentSpeed = 0;
+                currentSpeed = 0;
             else
-                CurrentSpeed -= a * (int)CurrentDirection;
+                currentSpeed -= a * (int)CurrentDirection;
         }
 
         private void Pivot(float bendAngle)
@@ -309,7 +526,7 @@ namespace CarWars
                 throw new System.ArgumentException("Can not accelerate higher than MaxAcceleration", "acceleration");
             if (CurrentSpeed == 0 || System.Math.Sign(acceleration) == System.Math.Sign(CurrentSpeed))
             {
-                CurrentSpeed += acceleration;
+                currentSpeed += acceleration;
                 AccelerationPerformed = true;
             }
             else
@@ -367,7 +584,7 @@ namespace CarWars
             }
         }
 
-        private void ControllRoll(int d)
+        public void ControllRoll(int d)
         {
             int c = ControlTable[(int)System.Math.Ceiling(System.Math.Abs(CurrentSpeed) / 10f)][7 - CurrentHandlingClass];
             if (RollADice(1) < c)
@@ -526,7 +743,7 @@ namespace CarWars
             }
             else if (drivable)
             {
-                CurrentDirection = System.Math.Sign(CurrentSpeed);
+                currentDirection = System.Math.Sign(CurrentSpeed);
                 float dist = MovementChart[System.Math.Abs(CurrentSpeed) / 5][Phase];
                 if (acceleartionFlag && !AccelerationPerformed)
                     Accelerate(acceleration);
@@ -572,6 +789,7 @@ namespace CarWars
             CurrentHandlingClass = HandlingClass;
             LoadTable("MovementChart.csv", ',', MovementChart, 60, 5);
             LoadTable("ControlTable.csv", ',', ControlTable, 30, 15);
+            LoadTable("TemporarySpeedTable.csv", ',', TemporarySpeedTable, 21, 21);
             CrashResults = new Del[8] { TrivialSkid, MinorSkid, ModerateSkid, SevereSkid, Spinout, Roll, BurningRoll, Vault };
         }
 
