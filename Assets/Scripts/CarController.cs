@@ -32,15 +32,22 @@ namespace CarWars
             get
             {
                 if (Weight <= 2000)
-                    return 1 / 3;
-                if (Weight <= 4000)
-                    return 2 / 3;
-                return (float)System.Math.Ceiling(Weight / 4000f) - 1;
+                {
+                    return  1 / 3f;
+                }
+                else if (Weight <= 4000)
+                {
+                    return  2 / 3f;
+                }
+                else
+                {
+                    return  (float)System.Math.Ceiling(Weight / 4000f) - 1;
+                }
             }
         }
 
         private bool drivable = true;
-        private int currentSpeed = 200;
+        private int currentSpeed = 50;
         public int CurrentSpeed
         {
             get
@@ -161,11 +168,12 @@ namespace CarWars
             var v = transform.up * GridSize * dist * CurrentDirection;
             //Debug.Log(v);
             SetCollidersEnabled(false);
-            RaycastHit hit;
-            if (Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit, v.magnitude)) //collision detected
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection, v.magnitude+1);
+            Debug.DrawRay(transform.position, v, new Color(255,0,0),10);
+            if (hit.collider != null) //collision detected
             {
-                var v1 = transform.up * CurrentDirection * hit.distance;
-                transform.Translate(transform.up * CurrentDirection * hit.distance);
+                var v1 = transform.up * CurrentDirection * (hit.distance - 1);
+                transform.Translate(v1);
                 bool canMove = HandleCollision(hit.collider);
                 if (canMove)
                     transform.Translate(v - v1);
@@ -177,7 +185,7 @@ namespace CarWars
             SetCollidersEnabled(true);
         }
 
-        private bool HandleCollision(Collider collision) //returns true if vehicle can continue its movement
+        private bool HandleCollision(Collider2D collision) //returns true if vehicle can continue its movement
         {
             CarController opponent = collision.GetComponentInParent<CarController>();
             int oldSpeed = CurrentSpeed;
@@ -240,6 +248,9 @@ namespace CarWars
                             flag = true;
                         }
                     }
+                    break;
+                default:
+                    flag = true;
                     break;
             }
             CurrentHandlingClass -= (int)System.Math.Ceiling((oldSpeed - CurrentSpeed) / 10f);
@@ -309,16 +320,15 @@ namespace CarWars
             opponent.CurrentSpeed = CurrentSpeed;
         }
 
-        private void PushConformingOpponent(int corner, float angle, Collider collision, Transform opponent)
+        private void PushConformingOpponent(int corner, float angle, Collider2D collision, Transform opponent)
         {
             var v = transform.up * CurrentDirection;
-            RaycastHit hit;
-            bool hitFlag = Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit);
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection);
             Vector3[] corners = GetCorners();
-            while(hitFlag && hit.collider == collision)
+            while(hit.collider == collision)
             {
-                opponent.Rotate(corners[corner], angle);
-                hitFlag = Physics.Raycast(transform.position, transform.up * CurrentDirection, out hit);
+                opponent.transform.RotateAround(corners[corner], opponent.transform.forward, angle);
+                hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection);
             }
         }
 
