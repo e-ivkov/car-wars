@@ -92,18 +92,7 @@ namespace CarWars
         }
 
         private bool drivable = true;
-        private int currentSpeed = 50;
-        public int CurrentSpeed
-        {
-            get
-            {
-                return currentSpeed;
-            }
-            set
-            {
-                currentSpeed = value;
-            }
-        }
+        public int CurrentSpeed = 0;
         private float currentDirection = 1;
         public float CurrentDirection
         {
@@ -185,10 +174,53 @@ namespace CarWars
 
         public void DamageSide(int i, int damage)
         {
-            if (Sides[i] > damage)
-                Sides[i] -= damage;
+            if (Sides[i] > 0)
+            {
+                if (Sides[i] > damage)
+                    Sides[i] -= damage;
+                else
+                    Sides[i] = 0;
+            }
             else
-                Sides[i] = 0;
+            {
+                ActivePowerPlant.DP -= damage;
+            }
+        }
+
+        public void FireWeapons()
+        {
+            foreach (var w in ActiveWeapons)
+            {
+                if (w.Firing)
+                {
+                    SetCollidersEnabled(false);
+                    RaycastHit2D hit = Physics2D.Raycast(transform.position, w.Orientation);
+                    SetCollidersEnabled(true);
+                    if (hit.collider != null && RollADice(2) >= ((ProjectileWeapon)w.CarPartType).ToHit)
+                    {
+                        int side = -1;
+                        switch (hit.collider.gameObject.name)
+                        {
+                            case "FrontSide":
+                                side = (int)SideNames.Front;
+                                break;
+                            case "RearSide":
+                                side = (int)SideNames.Back;
+                                break;
+                            case "LeftSide":
+                                side = (int)SideNames.Left;
+                                break;
+                            case "RightSide":
+                                side = (int)SideNames.Right;
+                                break;
+                        }
+                        if (side >= 0)
+                            hit.collider.GetComponentInParent<CarController>().DamageSide(side,
+                                    RollADice(((ProjectileWeapon)w.CarPartType).DamageDiceNumber));
+                    }
+                    w.Ammo--;
+                }
+            }
         }
 
         /// <param name="n"> number of dice </param>
@@ -232,76 +264,82 @@ namespace CarWars
 
         private bool HandleCollision(Collider2D collision) //returns true if vehicle can continue its movement
         {
-            CarController opponent = collision.GetComponentInParent<CarController>();
-            int oldSpeed = CurrentSpeed;
-            int opponentOldSpeed = opponent.CurrentSpeed;
             bool flag = false;
-            switch (collision.gameObject.name)
+            if (collision.gameObject.tag != "Obstacle")
             {
-                case "RightSide":
-                    HandleTBone(opponent, false);
-                    if (System.Math.Abs(CurrentSpeed) > 0)
-                    {
-                        PushConformingOpponent((int)Corners.TopRight, 1, collision, opponent.transform);
-                        flag = true;
-                    }
-                    break;
-                case "LeftSide":
-                    HandleTBone(opponent, true);
-                    if (System.Math.Abs(CurrentSpeed) > 0)
-                    {
-                        PushConformingOpponent((int)Corners.TopLeft, -1, collision, opponent.transform);
-                        flag = true;
-                    }
-                    break;
-                case "FrontSide":
-                    if (opponent.CurrentDirection > 0)
-                    {
-                        HandleHeadOn(opponent);
+                CarController opponent = collision.GetComponentInParent<CarController>();
+                int oldSpeed = CurrentSpeed;
+                int opponentOldSpeed = opponent.CurrentSpeed;
+
+
+                switch (collision.gameObject.name)
+                {
+                    case "RightSide":
+                        HandleTBone(opponent, false);
                         if (System.Math.Abs(CurrentSpeed) > 0)
                         {
-                            PushConformingOpponent((int)Corners.TopLeft, 1, collision, opponent.transform);
+                            PushConformingOpponent((int)Corners.TopRight, 1, collision, opponent.transform);
                             flag = true;
                         }
-                    }
-                    else
-                    {
-                        HandleRearEnd(opponent);
-                        if (DamageModifier > opponent.DamageModifier)
+                        break;
+                    case "LeftSide":
+                        HandleTBone(opponent, true);
+                        if (System.Math.Abs(CurrentSpeed) > 0)
                         {
                             PushConformingOpponent((int)Corners.TopLeft, -1, collision, opponent.transform);
                             flag = true;
                         }
-                    }
-                    break;
-                case "RearSide":
-                    if (opponent.CurrentDirection > 0)
-                    {
-                        HandleRearEnd(opponent);
-                        if (DamageModifier > opponent.DamageModifier)
+                        break;
+                    case "FrontSide":
+                        if (opponent.CurrentDirection > 0)
                         {
-                            PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
-                            flag = true;
+                            HandleHeadOn(opponent);
+                            if (System.Math.Abs(CurrentSpeed) > 0)
+                            {
+                                PushConformingOpponent((int)Corners.TopLeft, 1, collision, opponent.transform);
+                                flag = true;
+                            }
                         }
-                    }
-                    else
-                    {
-                        HandleHeadOn(opponent);
-                        if (System.Math.Abs(CurrentSpeed) > 0)
+                        else
                         {
-                            PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
-                            flag = true;
+                            HandleRearEnd(opponent);
+                            if (DamageModifier > opponent.DamageModifier)
+                            {
+                                PushConformingOpponent((int)Corners.TopLeft, -1, collision, opponent.transform);
+                                flag = true;
+                            }
                         }
-                    }
-                    break;
-                default:
-                    flag = true;
-                    break;
+                        break;
+                    case "RearSide":
+                        if (opponent.CurrentDirection > 0)
+                        {
+                            HandleRearEnd(opponent);
+                            if (DamageModifier > opponent.DamageModifier)
+                            {
+                                PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
+                                flag = true;
+                            }
+                        }
+                        else
+                        {
+                            HandleHeadOn(opponent);
+                            if (System.Math.Abs(CurrentSpeed) > 0)
+                            {
+                                PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
+                                flag = true;
+                            }
+                        }
+                        break;
+                    default:
+                        flag = true;
+                        break;
+                }
+
+                ControllRoll(1);
+                opponent.CurrentHandlingClass -= (int)System.Math.Ceiling((opponentOldSpeed - opponent.CurrentSpeed) / 10f);
+                opponent.ControllRoll(1);
+
             }
-            CurrentHandlingClass -= (int)System.Math.Ceiling((oldSpeed - CurrentSpeed) / 10f);
-            ControllRoll(1);
-            opponent.CurrentHandlingClass -= (int)System.Math.Ceiling((opponentOldSpeed - opponent.CurrentSpeed) / 10f);
-            opponent.ControllRoll(1);
             return flag;
         }
 
@@ -539,9 +577,9 @@ namespace CarWars
         private void DeccelerateUncontrolled(int a)
         {
             if (System.Math.Abs(CurrentSpeed) < a)
-                currentSpeed = 0;
+                CurrentSpeed = 0;
             else
-                currentSpeed -= a * (int)CurrentDirection;
+                CurrentSpeed -= a * (int)CurrentDirection;
         }
 
         private void Pivot(float bendAngle)
@@ -581,8 +619,11 @@ namespace CarWars
                 throw new System.ArgumentException("Can not accelerate higher than MaxAcceleration", "acceleration");
             if (CurrentSpeed == 0 || System.Math.Sign(acceleration) == System.Math.Sign(CurrentSpeed))
             {
-                currentSpeed += acceleration;
-                AccelerationPerformed = true;
+                if (ActivePowerPlant.Active)
+                {
+                    CurrentSpeed += acceleration;
+                    AccelerationPerformed = true;
+                }
             }
             else
                 Deccelerate(System.Math.Abs(acceleration));
@@ -786,15 +827,13 @@ namespace CarWars
         /// <param name="maneuverDist">should be 0 on the second state of maneuver if it's 2 state</param>
         /// <param name="acceleartionFlag"></param>
         /// <param name="acceleration"> acceleration % 5 = 0 </param>
-        private void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration)
+        /// <param name="weaponIndex">switches on/off weapon with given index, or does nothing if -1 </param>
+        private void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration, int weaponIndex)
         {
             CheckDrivable();
             if (InCrash)
             {
-                Debug.Log(CrashResultIndex);
                 CrashResults[CrashResultIndex]();
-                Debug.Log(InCrash);
-                Debug.Log(CurrentSpeed);
             }
             else if (drivable)
             {
@@ -812,6 +851,11 @@ namespace CarWars
                     ExecuteManeuver(maneuver, maneuverParam);
                 else
                     Move(dist);
+                if (!ActivePowerPlant.Active)
+                    DeccelerateUncontrolled(5);
+                if (weaponIndex > -1 && weaponIndex < ActiveWeapons.Length)
+                    ActiveWeapons[weaponIndex].TurnFiringOnOff();
+                FireWeapons();
             }
             if (Phase < 4)
                 Phase++;
@@ -835,7 +879,7 @@ namespace CarWars
         public void ParsePhaseInput()
         {
             var values = GameObject.Find("InputField").GetComponent<InputField>().text.Split(',');
-            PhaseUpdate(int.Parse(values[0]), float.Parse(values[1]), float.Parse(values[2]), bool.Parse(values[3]), int.Parse(values[4]));
+            PhaseUpdate(int.Parse(values[0]), float.Parse(values[1]), float.Parse(values[2]), bool.Parse(values[3]), int.Parse(values[4]), int.Parse(values[5]));
         }
 
         // Use this for initialization

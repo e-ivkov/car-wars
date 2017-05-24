@@ -5,7 +5,7 @@ using UnityEngine;
 public class ActiveCarPart
 {
 
-    DamagableCarPart CarPartType;
+    public DamagableCarPart CarPartType;
     private int dp;
     public int DP
     {

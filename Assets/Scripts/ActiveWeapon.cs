@@ -16,6 +16,9 @@ public class ActiveWeapon : ActiveCarPart
             if (value < 0)
             {
                 ammo = 0;
+            } else
+            {
+                ammo = value;
             }
             if(ammo == 0)
             {
@@ -35,6 +38,14 @@ public class ActiveWeapon : ActiveCarPart
         {
             firing = value;
         }
+    }
+
+    public void TurnFiringOnOff()
+    {
+        if (!Firing)
+            Firing = true;
+        else
+            Firing = false;
     }
 
     public Vector2 Orientation
