@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "CarWars/VehicleDesign/Body")]
-public class Body : CarPart {
+public class Body : CarPart
+{
 
     public int MaxLoad;
     public int Spaces;

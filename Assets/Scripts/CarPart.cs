@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CarPart : ScriptableObject {
+public class CarPart : ScriptableObject
+{
 
     public int Weight;
 

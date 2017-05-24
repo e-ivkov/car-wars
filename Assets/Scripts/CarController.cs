@@ -12,14 +12,59 @@ namespace CarWars
     public class CarController : MonoBehaviour
     {
 
-        public int Weight;
+        public int Weight
+        {
+            get
+            {
+                int weight = CarBody.Weight + CarPowerPlant.Weight;
+                weight += 4 * TireType.Weight;
+                foreach (int n in Sides)
+                {
+                    weight += n * CarBody.ArmorWeight;
+                }
+                foreach (var w in Weapons)
+                {
+                    weight += w.Weight;
+                    weight += w.AmmoWeight * w.MaxAmmoCapacity;
+                }
+                return weight;
+            }
+        }
         public int Cost;
         public int HandlingClass;
-        public int MaxAcceleration;
-        public int TopSpeed;
+        public int MaxAcceleration
+        {
+            get
+            {
+                if (CarPowerPlant.PowerFactors < Weight / 3)
+                    return 0;
+                else if (CarPowerPlant.PowerFactors < Weight / 2)
+                    return 5;
+                else if (CarPowerPlant.PowerFactors < Weight)
+                    return 10;
+                else
+                    return 15;
+            }
+        }
+        public int TopSpeed
+        {
+            get
+            {
+                return 360 * CarPowerPlant.PowerFactors / (CarPowerPlant.PowerFactors + Weight);
+            }
+        }
         public float GridSize;
+        [HideInInspector]
         public int[] Tires = new int[4];
         public int[] Sides = new int[6];            //F, T, L, R, U, B
+        public Body CarBody;
+        public Tire TireType;
+        public PowerPlant CarPowerPlant;
+        public ProjectileWeapon[] Weapons;
+        public Vector2[] WeaponOrientaions;
+        private ActiveCarPart ActivePowerPlant;
+        public ActiveWeapon[] ActiveWeapons;
+
         public bool Drivable
         {
             get
@@ -33,15 +78,15 @@ namespace CarWars
             {
                 if (Weight <= 2000)
                 {
-                    return  1 / 3f;
+                    return 1 / 3f;
                 }
                 else if (Weight <= 4000)
                 {
-                    return  2 / 3f;
+                    return 2 / 3f;
                 }
                 else
                 {
-                    return  (float)System.Math.Ceiling(Weight / 4000f) - 1;
+                    return (float)System.Math.Ceiling(Weight / 4000f) - 1;
                 }
             }
         }
@@ -168,8 +213,8 @@ namespace CarWars
             var v = transform.up * GridSize * dist * CurrentDirection;
             //Debug.Log(v);
             SetCollidersEnabled(false);
-            RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection, v.magnitude+1);
-            Debug.DrawRay(transform.position, v, new Color(255,0,0),10);
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection, v.magnitude + 1);
+            Debug.DrawRay(transform.position, v, new Color(255, 0, 0), 10);
             if (hit.collider != null) //collision detected
             {
                 var v1 = transform.up * CurrentDirection * (hit.distance - 1);
@@ -233,7 +278,7 @@ namespace CarWars
                     if (opponent.CurrentDirection > 0)
                     {
                         HandleRearEnd(opponent);
-                        if(DamageModifier > opponent.DamageModifier)
+                        if (DamageModifier > opponent.DamageModifier)
                         {
                             PushConformingOpponent((int)Corners.BtmRight, 1, collision, opponent.transform);
                             flag = true;
@@ -268,7 +313,7 @@ namespace CarWars
                 DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * opponent.DamageModifier));
             else
                 DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * opponent.DamageModifier));
-            if(left)
+            if (left)
                 opponent.DamageSide((int)SideNames.Left, (int)System.Math.Round(ram * DamageModifier));
             else
                 opponent.DamageSide((int)SideNames.Right, (int)System.Math.Round(ram * DamageModifier));
@@ -306,7 +351,7 @@ namespace CarWars
         {
             int collisionSpeed = System.Math.Abs(CurrentSpeed - opponent.CurrentSpeed);
             int ram = ComputeRamDamage(collisionSpeed);
-            if(CurrentDirection > 0)
+            if (CurrentDirection > 0)
                 DamageSide((int)SideNames.Front, (int)System.Math.Round(ram * opponent.DamageModifier));
             else
                 DamageSide((int)SideNames.Back, (int)System.Math.Round(ram * opponent.DamageModifier));
@@ -325,7 +370,7 @@ namespace CarWars
             var v = transform.up * CurrentDirection;
             RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection);
             Vector3[] corners = GetCorners();
-            while(hit.collider == collision)
+            while (hit.collider == collision)
             {
                 opponent.transform.RotateAround(corners[corner], opponent.transform.forward, angle);
                 hit = Physics2D.Raycast(transform.position, transform.up * CurrentDirection);
@@ -801,6 +846,16 @@ namespace CarWars
             LoadTable("ControlTable.csv", ',', ControlTable, 30, 15);
             LoadTable("TemporarySpeedTable.csv", ',', TemporarySpeedTable, 21, 21);
             CrashResults = new Del[8] { TrivialSkid, MinorSkid, ModerateSkid, SevereSkid, Spinout, Roll, BurningRoll, Vault };
+            ActivePowerPlant = new ActiveCarPart(CarPowerPlant);
+            ActiveWeapons = new ActiveWeapon[Weapons.Length];
+            for (int i = 0; i < ActiveWeapons.Length; i++)
+            {
+                ActiveWeapons[i] = new ActiveWeapon(Weapons[i], WeaponOrientaions[i]);
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                Tires[i] = TireType.MaxDP;
+            }
         }
 
         // Update is called once per frame

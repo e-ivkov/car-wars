@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ActiveCarPart {
+public class ActiveCarPart
+{
 
     DamagableCarPart CarPartType;
     private int dp;
@@ -15,10 +16,11 @@ public class ActiveCarPart {
 
         set
         {
-            if(value < 0)
+            if (value < 0)
             {
                 dp = 0;
-            } else if(value > CarPartType.MaxDP)
+            }
+            else if (value > CarPartType.MaxDP)
             {
                 dp = CarPartType.MaxDP;
             }
@@ -33,7 +35,7 @@ public class ActiveCarPart {
         }
     }
 
-    ActiveCarPart(DamagableCarPart partType)
+    public ActiveCarPart(DamagableCarPart partType)
     {
         CarPartType = partType;
         dp = partType.MaxDP;
