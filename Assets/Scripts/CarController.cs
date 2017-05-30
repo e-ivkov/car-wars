@@ -93,6 +93,7 @@ namespace CarWars
 
         private bool drivable = true;
         public int CurrentSpeed = 0;
+        public float CurrentReward { get; private set; }
         private float currentDirection = 1;
         public float CurrentDirection
         {
@@ -254,10 +255,12 @@ namespace CarWars
                 bool canMove = HandleCollision(hit.collider);
                 if (canMove)
                     transform.Translate(v - v1);
+                CurrentReward = -100;
             }
             else
             {
                 transform.Translate(v, Space.World);
+                CurrentReward = System.Math.Abs(CurrentSpeed);
             }
             SetCollidersEnabled(true);
         }
@@ -415,7 +418,7 @@ namespace CarWars
             }
         }
 
-        private void SetCollidersEnabled(bool enabled)
+        public void SetCollidersEnabled(bool enabled)
         {
             for (int i = 0; i < transform.childCount; i++)
             {
@@ -698,6 +701,7 @@ namespace CarWars
             {
                 CrashResultIndex = 7;
             }
+            CurrentReward = roll*-15;
             InCrash = true;
             ManeuverState = 0;
             Debug.Log("here!");
@@ -823,17 +827,18 @@ namespace CarWars
         /// Method which is called each phase for each car
         /// </summary>
         /// <param name="maneuver"> -1 or Maneuver; If maneuver is 2 state, then it should be called twice </param>
-        /// <param name="maneuverParam"></param>
+        /// <param name="maneuverParam">usually bendAngle but may differ for various manuevers</param>
         /// <param name="maneuverDist">should be 0 on the second state of maneuver if it's 2 state</param>
-        /// <param name="acceleartionFlag"></param>
+        /// <param name="acceleartionFlag">whether accelerate or not</param>
         /// <param name="acceleration"> acceleration % 5 = 0 </param>
         /// <param name="weaponIndex">switches on/off weapon with given index, or does nothing if -1 </param>
-        private void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration, int weaponIndex)
+        public void PhaseUpdate(int maneuver, float maneuverParam, float maneuverDist, bool acceleartionFlag, int acceleration, int weaponIndex)
         {
             CheckDrivable();
             if (InCrash)
             {
                 CrashResults[CrashResultIndex]();
+                CurrentReward = 0;
             }
             else if (drivable)
             {
@@ -892,6 +897,7 @@ namespace CarWars
             CrashResults = new Del[8] { TrivialSkid, MinorSkid, ModerateSkid, SevereSkid, Spinout, Roll, BurningRoll, Vault };
             ActivePowerPlant = new ActiveCarPart(CarPowerPlant);
             ActiveWeapons = new ActiveWeapon[Weapons.Length];
+            CurrentReward = 0;
             for (int i = 0; i < ActiveWeapons.Length; i++)
             {
                 ActiveWeapons[i] = new ActiveWeapon(Weapons[i], WeaponOrientaions[i]);
