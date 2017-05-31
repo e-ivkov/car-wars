@@ -56,7 +56,9 @@ namespace CarWars
         public float GridSize;
         [HideInInspector]
         public int[] Tires = new int[4];
+        [HideInInspector]
         public int[] Sides = new int[6];            //F, T, L, R, U, B
+        public int SideMaxDP;
         public Body CarBody;
         public Tire TireType;
         public PowerPlant CarPowerPlant;
@@ -64,6 +66,14 @@ namespace CarWars
         public Vector2[] WeaponOrientaions;
         private ActiveCarPart ActivePowerPlant;
         public ActiveWeapon[] ActiveWeapons;
+
+        public bool GameLost
+        {
+            get
+            {
+                return !Drivable || (!ActivePowerPlant.Active && System.Math.Abs(CurrentSpeed) < 5);
+            }
+        }
 
         public bool Drivable
         {
@@ -268,7 +278,7 @@ namespace CarWars
         private bool HandleCollision(Collider2D collision) //returns true if vehicle can continue its movement
         {
             bool flag = false;
-            if (collision.gameObject.tag != "Obstacle")
+            if (collision.gameObject.tag == "CarSide")
             {
                 CarController opponent = collision.GetComponentInParent<CarController>();
                 int oldSpeed = CurrentSpeed;
@@ -338,11 +348,16 @@ namespace CarWars
                         break;
                 }
 
-                ControllRoll(1);
+                
                 opponent.CurrentHandlingClass -= (int)System.Math.Ceiling((opponentOldSpeed - opponent.CurrentSpeed) / 10f);
                 opponent.ControllRoll(1);
-
             }
+            else
+            {
+                CurrentSpeed = 0;
+                transform.Translate(-transform.up * currentDirection * GridSize);
+            }
+            ControllRoll(1);
             return flag;
         }
 
@@ -876,10 +891,45 @@ namespace CarWars
                 }
                 Turn++;
             }
-
+            if (GameLost)
+            {
+                CurrentReward = -500;
+                Reset();
+            }
         }
 
-
+        public void Reset()
+        {
+            transform.rotation = Quaternion.identity;
+            transform.position = Vector3.zero;
+            CurrentReward = 0;
+            CurrentSpeed = 0;
+            currentDirection = 1;
+            CurrentHandlingClass = HandlingClass;
+            ActivePowerPlant = new ActiveCarPart(CarPowerPlant);
+            ActiveWeapons = new ActiveWeapon[Weapons.Length];
+            drivable = true;
+            Phase = 0;
+            Turn = 0;
+            ManeuverState = 0;
+            AccelerationPerformed = false;
+            InCrash = false;
+            CurrentManeuver = -1;
+            RollParam = 0;
+            CrashResultIndex = -1;
+            for (int i = 0; i < ActiveWeapons.Length; i++)
+            {
+                ActiveWeapons[i] = new ActiveWeapon(Weapons[i], WeaponOrientaions[i]);
+            }
+            for (int i = 0; i < Tires.Length; i++)
+            {
+                Tires[i] = TireType.MaxDP;
+            }
+            for(int i = 0; i < Sides.Length; i++)
+            {
+                Sides[i] = SideMaxDP;
+            }
+        }
 
         public void ParsePhaseInput()
         {
@@ -890,22 +940,11 @@ namespace CarWars
         // Use this for initialization
         void Start()
         {
-            CurrentHandlingClass = HandlingClass;
             LoadTable("MovementChart.csv", ',', MovementChart, 60, 5);
             LoadTable("ControlTable.csv", ',', ControlTable, 30, 15);
             LoadTable("TemporarySpeedTable.csv", ',', TemporarySpeedTable, 21, 21);
             CrashResults = new Del[8] { TrivialSkid, MinorSkid, ModerateSkid, SevereSkid, Spinout, Roll, BurningRoll, Vault };
-            ActivePowerPlant = new ActiveCarPart(CarPowerPlant);
-            ActiveWeapons = new ActiveWeapon[Weapons.Length];
-            CurrentReward = 0;
-            for (int i = 0; i < ActiveWeapons.Length; i++)
-            {
-                ActiveWeapons[i] = new ActiveWeapon(Weapons[i], WeaponOrientaions[i]);
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                Tires[i] = TireType.MaxDP;
-            }
+            Reset();
         }
 
         // Update is called once per frame

@@ -2,6 +2,7 @@ import random
 import socket
 from collections import deque
 from struct import pack, unpack
+import numpy as np
 
 
 class EnvironmentInterface:
@@ -34,7 +35,7 @@ class EnvironmentInterface:
         # Velocity is encoded as x * 2^16
         response = [r/0xffff for r in response]
         reward = response[1]
-        state = response[1:]
+        state = np.array([response[1:]])
         return reward, state
 
     '''

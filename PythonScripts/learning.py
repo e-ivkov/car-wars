@@ -6,7 +6,7 @@ from nn import neural_net, LossHistory
 import os.path
 import timeit
 
-NUM_INPUT = 3
+NUM_INPUT = 7
 GAMMA = 0.9  # Forgetting.
 TUNING = False  # If False, just use arbitrary, pre-selected params.
 HOST = 'localhost'
@@ -17,9 +17,9 @@ def train_net(model, params):
 
     filename = params_to_filename(params)
 
-    observe = 1000  # Number of frames to observe before training.
+    observe = 100  # Number of frames to observe before training.
     epsilon = 1
-    train_frames = 1000000  # Number of frames to play.
+    train_frames = 10000  # Number of frames to play.
     batchSize = params['batchSize']
     buffer = params['buffer']
 
@@ -149,7 +149,7 @@ def process_minibatch(minibatch, model):
         newQ = model.predict(new_state_m, batch_size=1)
         # Get our best move. I think?
         maxQ = np.max(newQ)
-        y = np.zeros((1, 3))
+        y = np.zeros((1, 7))
         y[:] = old_qval[:]
         # Check for terminal state.
         if reward_m != -500:  # non-terminal state
@@ -159,7 +159,7 @@ def process_minibatch(minibatch, model):
         # Update the value for the action we took.
         y[0][action_m] = update
         X_train.append(old_state_m.reshape(NUM_INPUT,))
-        y_train.append(y.reshape(3,))
+        y_train.append(y.reshape(7,))
 
     X_train = np.array(X_train)
     y_train = np.array(y_train)

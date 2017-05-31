@@ -39,7 +39,7 @@ def neural_net(num_sensors, params, load=''):
     model.add(Dropout(0.2))
 
     # Output layer.
-    model.add(Dense(3, init='lecun_uniform'))
+    model.add(Dense(7, init='lecun_uniform'))
     model.add(Activation('linear'))
 
     rms = RMSprop()
@@ -59,7 +59,7 @@ def lstm_net(num_sensors, load=False):
     model.add(Dropout(0.2))
     model.add(LSTM(output_dim=512, input_dim=512, return_sequences=False))
     model.add(Dropout(0.2))
-    model.add(Dense(output_dim=3, input_dim=512))
+    model.add(Dense(output_dim=7, input_dim=512))
     model.add(Activation("linear"))
     model.compile(loss="mean_squared_error", optimizer="rmsprop")
 

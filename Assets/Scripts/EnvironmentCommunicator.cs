@@ -22,6 +22,7 @@ namespace CarWars
 
         private const byte REQUEST_READ_SENSORS = 1;
         private const byte REQUEST_WRITE_ACTION = 2;
+        private const byte REQUEST_RESTART = 3;
 
         private class Client
         {
@@ -168,6 +169,10 @@ namespace CarWars
                             client.bytesLeft -= 4;
                             Debug.Log("Write message request");
                             ApplyAction(action);
+                            break;
+                        case REQUEST_RESTART:
+                            Car.Reset();
+                            Debug.Log("Restart request");
                             break;
                     }
                 }
