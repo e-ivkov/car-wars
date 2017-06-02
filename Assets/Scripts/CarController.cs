@@ -103,7 +103,7 @@ namespace CarWars
 
         private bool drivable = true;
         public int CurrentSpeed = 0;
-        public float CurrentReward { get; private set; }
+        public float CurrentReward { get; set; }
         private float currentDirection = 1;
         public float CurrentDirection
         {
@@ -260,17 +260,25 @@ namespace CarWars
             Debug.DrawRay(transform.position, v, new Color(255, 0, 0), 10);
             if (hit.collider != null) //collision detected
             {
-                var v1 = transform.up * CurrentDirection * (hit.distance - 1);
-                transform.Translate(v1);
-                bool canMove = HandleCollision(hit.collider);
-                if (canMove)
-                    transform.Translate(v - v1);
-                CurrentReward = -100;
+                if (hit.collider.CompareTag("Killzone"))
+                {
+                    Reset();
+                    CurrentReward = -500;
+                }
+                else
+                {
+                    var v1 = transform.up * CurrentDirection * (hit.distance - 1);
+                    transform.Translate(v1);
+                    bool canMove = HandleCollision(hit.collider);
+                    if (canMove)
+                        transform.Translate(v - v1);
+                    CurrentReward = -100;
+                }
             }
             else
             {
                 transform.Translate(v, Space.World);
-                CurrentReward = System.Math.Abs(CurrentSpeed);
+                CurrentReward = System.Math.Abs(CurrentSpeed / 5);
             }
             SetCollidersEnabled(true);
         }
@@ -348,7 +356,7 @@ namespace CarWars
                         break;
                 }
 
-                
+
                 opponent.CurrentHandlingClass -= (int)System.Math.Ceiling((opponentOldSpeed - opponent.CurrentSpeed) / 10f);
                 opponent.ControllRoll(1);
             }
@@ -716,7 +724,7 @@ namespace CarWars
             {
                 CrashResultIndex = 7;
             }
-            CurrentReward = roll*-15;
+            CurrentReward = roll * -15;
             InCrash = true;
             ManeuverState = 0;
             Debug.Log("here!");
@@ -925,7 +933,7 @@ namespace CarWars
             {
                 Tires[i] = TireType.MaxDP;
             }
-            for(int i = 0; i < Sides.Length; i++)
+            for (int i = 0; i < Sides.Length; i++)
             {
                 Sides[i] = SideMaxDP;
             }

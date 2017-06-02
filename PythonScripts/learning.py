@@ -17,7 +17,7 @@ def train_net(model, params):
 
     filename = params_to_filename(params)
 
-    observe = 100  # Number of frames to observe before training.
+    observe = 1000  # Number of frames to observe before training.
     epsilon = 1
     train_frames = 10000  # Number of frames to play.
     batchSize = params['batchSize']
